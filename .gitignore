@@ -2,3 +2,4 @@ venv/
 *.pdf
 *.log
 *.aux
+global_wordfreq.release_UTF-8.txt
