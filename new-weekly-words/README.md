@@ -1,114 +1,99 @@
-# Chinese Frequency Vocabulary Toolkit
+This directory will help you take your anki known words and find the next `n` words to learn. The idea is that you're going to put these into an AI and prompt it to make you a "graded reader". This reader will:
 
-This directory helps you build your own Chinese vocabulary learning database and generate frequency-based word lists for language study and Anki import.
+ * contain all `n` of the new words in the story
+ * any of the "legacy" words you already know
+ * ideally nothing more outside of character names or places
 
----
+The basic idea is we're going to continually get the most efficient new words to learn, make an anki deck with them, then read the graded reader. This is intended to structure your learning in the smartest way possible.
 
-## 📥 1. Download the BCC Chinese Frequency List
+I'm using sql here because these word lists are enormous, and I don't want to worry about performance or anything silly.
 
-You will need the BCC corpus frequency list, which is available from Pleco Forums:
-- [Word frequency list based on a 15 billion character corpus (BCC/BLCU Chinese Corpus)](https://www.plecoforums.com/threads/word-frequency-list-based-on-a-15-billion-character-corpus-bcc-blcu-chinese-corpus.5859/)
+## VENV
+Go into the `new-weekly-words/` dir and start a venv:
 
-**Download the file (usually called `BCC-Finalresult.txt` or similar) and place it in this directory.**
-
----
-
-## 🗄️ 2. Build the Database
-
-Create a SQLite database (`freq_words.db`) and import the frequency list.
-
-**a. Create the tables:**
-
-```sql
--- In your SQLite client (e.g., sqlite3 freq_words.db)
-CREATE TABLE freq_words (
-    rank INTEGER PRIMARY KEY,
-    word TEXT NOT NULL,
-    frequency INTEGER NOT NULL
-);
-
-CREATE TABLE known_words (
-    word TEXT PRIMARY KEY
-);
+```
+cd mandarin/new-weekly-words
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-**b. Import the frequency list:**
+## Get the word frequency list
+You need to download the word frequency codex thing. Here is where I got it:
 
-Assuming the downloaded file is tab-separated and has columns: rank, word, frequency:
+https://www.plecoforums.com/threads/word-frequency-list-based-on-a-15-billion-character-corpus-bcc-blcu-chinese-corpus.5859/
 
-```bash
-sqlite3 freq_words.db
-.mode tabs
-.import BCC-Finalresult.txt freq_words
-.exit
+It's the `global_wordfreq.release_UTF-8.txt` that I used.
+
+## Create the db
+In your venv, run the script:
+
 ```
-*(If your file format is different, adjust accordingly.)*
-
----
-
-## ✅ 3. Mark Known Words
-
-Add words you've already learned to the `known_words` table.  
-You can do this manually, or by importing from your Anki export or another source.
-
-**Example SQL:**
-```sql
-INSERT INTO known_words (word) VALUES ('的');
-```
-Or, if you have a text file with one known word per line:
-```bash
-sqlite3 freq_words.db
-.mode list
-.import known_words.txt known_words
+python setup_frequency_db.py
 ```
 
----
+This should create a database and table for this big file you downloaded.
 
-## 🐍 4. Run Scripts
+## Get your known cards from anki
+In anki:
 
-### a. Generate Unknown Words Lists
+ * Browse 
+ * select "Review" on the left 
+ * select/highlight all these cards
+ * at the top select "Notes"
+ * "Export Notes"
+ * Export Format: Notes in plain text
+ * unselect all options
 
-Use the provided script to generate the next N unknown, high-frequency Chinese words.
+save this as "raw_notes.txt" in this `new-weekly-words` directory.
 
-```bash
-python get_next_unknown_words.py [number_of_words]
+NOTE: My words spanned a few different formats, and the script accounts for that. For example:
+
 ```
-- Default: 250 words if you don't specify a number.
-- Outputs:
-  - `next_unknown_words.txt` with lines like: `178	重要`
-  - `next_unknown_words_comma.txt` with a single comma+space-delimited line: `重要, 世界, ...`
+330	地方	地方	dìfang	place; space; room; part, (fāng: local; regional)	noun		这个城市是我出生的地方。	這個城市是我出生的地方。	Zhège chéngshì shì wǒ chūshēng de dìfang.	This city is where I was born.				
+了	already, finished	le	他已经吃了饭。	He has already eaten.		
+```
 
-### b. (Optional) Anki Export
+these two lines are slightly different, and I want the word only.
 
-You can adapt or extend the scripts to create CSVs for Anki import, or use the output words to create your own flashcards.
+## Extract the words from the raw Anki
+Run the script:
 
----
+```
+python extract_mandarin_words.py
+```
 
-## 📝 File Reference
+This will simply create a big file with all your words in it, 1 per row. **Do not** worry about dupes here, the next step will handle that smoothly every single time.
 
-- `get_next_unknown_words.py`: Main script for generating unknown word lists.
-- `freq_words.db`: SQLite database with frequency and known words tables.
-- `next_unknown_words.txt`: Tab-separated rank and word output.
-- `next_unknown_words_comma.txt`: Comma+space separated word list.
-- *(Add your known words file as `known_words.txt` if importing.)*
+## Add these known words to the known words sql table
 
----
+This will take all of your words and put them into another SQLite table. Each time you do this with your new words, the script will automatically update everything for you. It takes into account duplicates, so don't worry about that:
 
-## 🚀 Example Workflow
+```
+python update_known_words.py
+```
 
-1. Download and place the BCC file in this directory.
-2. Create the database and tables (step 2 above).
-3. Add your known words to the database.
-4. Run `python get_next_unknown_words.py 250` to get your next 250 high-frequency unknown words.
-5. Use the output files to guide your studies or generate Anki cards.
+## Get the next best words (our actual goal)
+Now for the moment of truth. This script is going to grab the next `n` words that are statistically most frequently used amongst all content. It defaults to 250, but change it to however much you think you can handle.
 
----
+```
+python get_next_known_words.py
+```
 
-## 📚 Source
+or, alternatively
 
-**Frequency data courtesy of:**  
-[Pleco Forums: BCC 15 Billion Character Frequency List](https://www.plecoforums.com/threads/word-frequency-list-based-on-a-15-billion-character-corpus-bcc-blcu-chinese-corpus.5859/)
+```
+python get_next_known_words.py 350
+```
 
----
+whatever number you want.
 
-Happy studying!
+This creates two files:
+
+  1. `next_unknown_words.txt`
+  2. `next_unknown_words_comma.txt`
+
+## Next steps
+Ok so the whole purpose of this is two things:
+
+  1. You're going to take these new words and create an Anki deck with them. See the `anki_decks/` directory and README.md for instructions on how to do that.
+  2. You're going to prompt the AI of your choice to generate a graded reader for you that uses these words and the legacy words. I'm currently working on a structured way to achieve this and will update the repository with that module.
