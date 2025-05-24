@@ -46,6 +46,9 @@ The script uses the [CC-CEDICT dictionary](https://www.mdbg.net/chinese/dictiona
 
 ## 3. Preparing Your Input File
 
+> **Note:**  
+> I **highly** recommend you check out the `new-weekly-words/` module in this repository. This will organize how you generate each deck you want to create. The general idea is that each deck will be the next `n` statistically most frequently used words across all Chinese media content.
+
 Prepare a UTF-8 encoded, tab-separated file (e.g., `anki_decks/sample_deck.txt`) in the format:
 
 ```

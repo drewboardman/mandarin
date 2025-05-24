@@ -53,7 +53,7 @@ NOTE: My words spanned a few different formats, and the script accounts for that
 了	already, finished	le	他已经吃了饭。	He has already eaten.		
 ```
 
-these two lines are slightly different, and I want the word only.
+these two lines are slightly different, and I want the word only. This script takes this into account, as well as garbage like headers at the top of the file.
 
 ## Extract the words from the raw Anki
 Run the script:
