@@ -47,13 +47,20 @@ def main():
     cur.execute('''
         SELECT tcw.word FROM temp_csv_words tcw
         LEFT JOIN known_words kw ON tcw.word = kw.word
-        WHERE kw.word IS NULL LIMIT 20
+        WHERE kw.word IS NULL
     ''')
-    sample_unknown = [row[0] for row in cur.fetchall()]
+    all_unknown = [row[0] for row in cur.fetchall()]
+
+    # Write all unknown words to file
+    output_path = os.path.join(os.path.dirname(__file__), 'words_for_ai.txt')
+    with open(output_path, 'w', encoding='utf-8') as f:
+        for word in all_unknown:
+            f.write(word + '\n')
 
     print(f"Total words in CSV: {len(words)}")
     print(f"Number of unknown words: {unknown_count}")
-    print("Sample unknown words:", sample_unknown)
+    print(f"Sample unknown words: {all_unknown[:20]}")
+    print(f"All unknown words written to {output_path}")
 
     conn.close()
 

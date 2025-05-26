@@ -6,7 +6,7 @@ venv/
 *.csv
 *.tsv
 *.txt
-!new-weekly-words/refold_not_in_master.txt
+!new-weekly-words/words_for_ai.txt
 *.numbers
 global_wordfreq.release_UTF-8.txt
 new-weekly-words/freq_words.db
