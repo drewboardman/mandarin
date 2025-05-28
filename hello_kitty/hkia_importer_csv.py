@@ -73,14 +73,32 @@ def main():
     known_words = load_known_words(conn, KNOWN_WORDS_TABLE)
     char_names = load_character_names(CHAR_NAME_PATH)
 
-    known_found = set()
+    # Load SUBTLEX chars and words
+    subtlex_chars = set()
+    subtlex_words = set()
+    try:
+        cur = conn.execute('SELECT character FROM subtlex_chars')
+        for (char,) in cur.fetchall():
+            subtlex_chars.add(char)
+    except Exception:
+        pass
+    try:
+        cur = conn.execute('SELECT word FROM subtlex_words')
+        for (word,) in cur.fetchall():
+            subtlex_words.add(word)
+    except Exception:
+        pass
 
+    known_found = set()
+    not_found_in_freq_set = set()
+    not_found_anywhere_set = set()
     with open(INPUT_CSV, encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
         for row in reader:
-            if not row or not row[0].strip():
+            # Join all columns to reconstruct the full sentence
+            phrase = ''.join(row).strip()
+            if not phrase:
                 continue
-            phrase = row[0].strip()
             if not contains_chinese(phrase) and phrase not in char_names:
                 continue
             for word in jieba.cut(phrase):
@@ -93,41 +111,34 @@ def main():
                     known_found.add(word)
                     continue  # Skip if already known
                 freq_rank = word_freq.get(word)
-                upsert_word(conn, word, freq_rank)
+                in_subtlex_word = word in subtlex_words
+                in_subtlex_char = word in subtlex_chars
+                in_char_names = word in char_names
+                if (freq_rank is None) and (not in_subtlex_word) and (not in_subtlex_char) and (not in_char_names):
+                    not_found_anywhere_set.add(word)
+                    upsert_word(conn, word, None)
+                elif (freq_rank is None):
+                    not_found_in_freq_set.add(word)
+                    upsert_word(conn, word, None)
+                else:
+                    upsert_word(conn, word, freq_rank)
 
     conn.commit()
     total_words = count_words(conn, HKIA_TABLE)
     total_known_found = len(known_found)
 
-    # Find freq_rank range
+    # Find freq_rank range (for info only, not for assignment)
     cur = conn.cursor()
     cur.execute(f"SELECT MIN(freq_rank), MAX(freq_rank) FROM {HKIA_TABLE} WHERE freq_rank IS NOT NULL")
     min_freq, max_freq = cur.fetchone()
     cur.execute(f"SELECT COUNT(*) FROM {HKIA_TABLE} WHERE freq_rank IS NULL")
     null_count = cur.fetchone()[0]
 
-    assigned = 0
-    if min_freq is not None and max_freq is not None and null_count > 0:
-        # Top 40% means: assign between lower_bound (60% of range) and max_freq
-        freq_range = max_freq - min_freq
-        lower_bound = int(min_freq + 0.6 * freq_range)
-        cur.execute(f"SELECT word FROM {HKIA_TABLE} WHERE freq_rank IS NULL")
-        null_words = [row[0] for row in cur.fetchall()]
-        for word in null_words:
-            rand_freq = random.randint(lower_bound, max_freq)
-            conn.execute(f"UPDATE {HKIA_TABLE} SET freq_rank=? WHERE word=?", (rand_freq, word))
-            assigned += 1
-        conn.commit()
-        # Recompute min/max after assignment
-        cur.execute(f"SELECT MIN(freq_rank), MAX(freq_rank) FROM {HKIA_TABLE}")
-        new_min, new_max = cur.fetchone()
-        print(f"\n{assigned} words with missing freq_rank were assigned random values in the top 40% (most frequent) of the frequency range.")
-        print(f"Assignment range: {lower_bound} (60% of range) to {max_freq} (most frequent). New min: {new_min}, new max: {new_max}.")
-    else:
-        print(f"\nNo freq_rank assignment needed or possible. min_freq: {min_freq}, max_freq: {max_freq}, null_count: {null_count}")
-
     print(f"Import complete. {total_words} unique words in the hkia table.")
     print(f"{total_known_found} words from this session were already found in the known_words table and skipped.")
+    print(f"{len(not_found_in_freq_set)} unique words were not found in the frequency table but were found in SUBTLEX or character_names and were added with no freq_rank.")
+    print(f"{len(not_found_anywhere_set)} unique words were not found in any frequency table and were added with no freq_rank.")
+    print(f"min_freq: {min_freq}, max_freq: {max_freq}, null_count: {null_count}")
 
     conn.close()
 
