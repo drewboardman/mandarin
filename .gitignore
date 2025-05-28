@@ -7,6 +7,7 @@ venv/
 *.tsv
 *.txt
 !new-weekly-words/words_for_ai.txt
+!hello_kitty/next_hkia_words.txt
 *.numbers
 global_wordfreq.release_UTF-8.txt
 new-weekly-words/freq_words.db
