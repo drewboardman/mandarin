@@ -1,7 +1,7 @@
 import sqlite3
 import unicodedata
 
-DB_FILE = 'freq_words.db'
+DB_FILE = '../freq_words.db'
 KNOWN_FILE = 'known_words.txt'
 
 def extract_word(line):

@@ -14,3 +14,4 @@ new-weekly-words/freq_words.db
 deck-backups/
 secrets.env
 tmp/
+disney/LocDB_zh-CN/
