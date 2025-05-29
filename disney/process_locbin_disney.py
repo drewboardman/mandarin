@@ -75,17 +75,9 @@ def main():
     # Segment words
     segmented = segment_phrases(all_phrases)
 
-    processed_words = set()
-    added_disney = 0
-    already_known = 0
-    added_suspect = 0
-    cedict_only_count = 0
-    jieba_only_count = 0
-
     # Parse CEDICT and assign a pseudo-frequency for top 40% most frequent words
     def parse_cedict_with_freq(path):
         dictionary = {}
-        lines = []
         with open(path, encoding='utf-8') as f:
             for line in f:
                 if line.startswith('#'):
@@ -93,28 +85,29 @@ def main():
                 match = re.match(r"(\S+)\s+(\S+)\s+\[(.+?)\]\s+/(.+)/", line)
                 if match:
                     trad, simp, pinyin, eng = match.groups()
-                    translations = eng.split('/')
-                    cleaned = re.split(r'[;(\[]', translations[0])[0].strip()
-                    lines.append((simp, cleaned, pinyin))
-        # Assign pseudo-frequency: top 40% get a rank, rest are None
-        total = len(lines)
-        cutoff = int(total * 0.4)
-        for i, (simp, cleaned, pinyin) in enumerate(lines):
-            freq_rank = i + 1 if i < cutoff else None
-            dictionary[simp] = (cleaned, pinyin, freq_rank)
+                    dictionary[simp] = (eng, pinyin)
         return dictionary
 
     cedict_path = os.path.abspath(os.path.join('..', 'cedict_ts.u8'))
     cedict_dict = parse_cedict_with_freq(cedict_path)
 
-    # Before processing, get min/max freq_rank in disney table (for top 40% assignment)
-    cur.execute('SELECT MIN(freq_rank), MAX(freq_rank) FROM disney WHERE freq_rank IS NOT NULL')
-    min_freq, max_freq = cur.fetchone()
-    if min_freq is None or max_freq is None:
-        # If no freq values yet, set defaults
-        min_freq, max_freq = 1, 1000
-    freq_range = max_freq - min_freq
-    top_40_cutoff = min_freq + int(freq_range * 0.4)
+    processed_words = set()
+    added_disney = 0
+    already_known = 0
+    added_suspect = 0
+    cedict_only_count = 0
+    jieba_only_count = 0
+    missing_jieba_freq = 0
+    # Get min/max for freq_words for normalization
+    cur.execute('SELECT MIN(rank), MAX(rank) FROM freq_words')
+    min_freq_rank, max_freq_rank = cur.fetchone()
+    norm_min, norm_max = min_freq_rank, max_freq_rank  # Use freq_words as the scale
+
+    def map_relative(val, minval, maxval, target_min, target_max):
+        if val is None or minval is None or maxval is None or maxval == minval:
+            return None
+        rel = (val - minval) / (maxval - minval)
+        return int(rel * (target_max - target_min) + target_min)
 
     for word in tqdm(segmented, desc="Processing segmented words"):
         if word in processed_words:
@@ -127,41 +120,41 @@ def main():
         cur.execute('SELECT rank FROM freq_words WHERE word = ?', (word,))
         row = cur.fetchone()
         if row:
-            cur.execute('INSERT OR IGNORE INTO disney (word, freq_rank) VALUES (?, ?)', (word, row[0]))
+            freq_rank = row[0]
+            cur.execute('INSERT OR IGNORE INTO disney (word, freq_rank) VALUES (?, ?)', (word, freq_rank))
             added_disney += 1
             continue
         # Check subtlex_words
         cur.execute('SELECT freq_count FROM subtlex_words WHERE word = ?', (word,))
         row = cur.fetchone()
         if row:
-            cur.execute('INSERT OR IGNORE INTO disney (word, freq_rank) VALUES (?, ?)', (word, None))
+            cur.execute('SELECT MIN(freq_count), MAX(freq_count) FROM subtlex_words')
+            min_subtlex_word, max_subtlex_word = cur.fetchone()
+            freq_rank = map_relative(row[0], min_subtlex_word, max_subtlex_word, norm_min, norm_max)
+            cur.execute('INSERT OR IGNORE INTO disney (word, freq_rank) VALUES (?, ?)', (word, freq_rank))
             added_disney += 1
             continue
         # Check subtlex_chars
         cur.execute('SELECT freq_count FROM subtlex_chars WHERE character = ?', (word,))
         row = cur.fetchone()
         if row:
-            cur.execute('INSERT OR IGNORE INTO disney (word, freq_rank) VALUES (?, ?)', (word, None))
+            cur.execute('SELECT MIN(freq_count), MAX(freq_count) FROM subtlex_chars')
+            min_subtlex_char, max_subtlex_char = cur.fetchone()
+            freq_rank = map_relative(row[0], min_subtlex_char, max_subtlex_char, norm_min, norm_max)
+            cur.execute('INSERT OR IGNORE INTO disney (word, freq_rank) VALUES (?, ?)', (word, freq_rank))
             added_disney += 1
             continue
         # Check CEDICT
         if word in cedict_dict:
-            # Assign a random freq_rank in the top 40% of the disney table
-            if freq_range > 0:
-                freq_rank = random.randint(min_freq, top_40_cutoff)
-            else:
-                freq_rank = min_freq
+            # Assign a random freq_rank in the top 40% of the freq_words scale
+            freq_rank = random.randint(norm_min, norm_min + int((norm_max-norm_min)*0.4))
             cur.execute('INSERT OR IGNORE INTO disney (word, freq_rank) VALUES (?, ?)', (word, freq_rank))
             added_disney += 1
             cedict_only_count += 1
             continue
         # Check jieba
         if jieba.lcut(word, cut_all=False) == [word]:
-            # Assign a random freq_rank in the top 40% of the disney table
-            if freq_range > 0:
-                freq_rank = random.randint(min_freq, top_40_cutoff)
-            else:
-                freq_rank = min_freq
+            freq_rank = random.randint(norm_min, norm_min + int((norm_max-norm_min)*0.4))
             cur.execute('INSERT OR IGNORE INTO disney (word, freq_rank) VALUES (?, ?)', (word, freq_rank))
             added_disney += 1
             jieba_only_count += 1
@@ -175,7 +168,6 @@ def main():
         else:
             cur.execute('INSERT INTO suspected_words (word, valid, tag) VALUES (?, NULL, ?)', (word, tag))
         added_suspect += 1
-
     conn.commit()
 
     # Count totals
@@ -184,8 +176,10 @@ def main():
     cur.execute('SELECT COUNT(*) FROM suspected_words')
     suspect_count = cur.fetchone()[0]
     print(f"Words in disney table: {disney_count}")
-    print(f"Words already known: {already_known}")
-    print(f"Words added to suspected_words: {added_suspect} (total in table: {suspect_count})")
+    print(f"Words already known (skipped): {already_known}")
+    print(f"Words added to suspected_words (not found in any freq table or jieba): {added_suspect} (total in table: {suspect_count})")
+    print(f"Words added to disney table from freq_words: {disney_count - (added_suspect + cedict_only_count + jieba_only_count)}")
+    print(f"Words added to disney table from subtlex_words or subtlex_chars (normalized to freq_words scale): (count not tracked separately)")
     print(f"Words added to disney table only from CEDICT: {cedict_only_count}")
     print(f"Words added to disney table only from jieba: {jieba_only_count}")
 
