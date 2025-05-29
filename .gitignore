@@ -13,3 +13,4 @@ global_wordfreq.release_UTF-8.txt
 new-weekly-words/freq_words.db
 deck-backups/
 secrets.env
+tmp/

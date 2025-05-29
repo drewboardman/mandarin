@@ -89,9 +89,46 @@ def main():
     except Exception:
         pass
 
+    # Parse CEDICT
+    def parse_cedict(path):
+        dictionary = {}
+        with open(path, encoding='utf-8') as f:
+            for line in f:
+                if line.startswith('#'):
+                    continue
+                match = re.match(r"(\S+)\s+(\S+)\s+\[(.+?)\]\s+/(.+)/", line)
+                if match:
+                    trad, simp, pinyin, eng = match.groups()
+                    translations = eng.split('/')
+                    cleaned = re.split(r'[;(\[]', translations[0])[0].strip()
+                    dictionary[simp] = (cleaned, pinyin)
+        return dictionary
+
+    cedict_path = '../cedict_ts.u8'
+    cedict_dict = parse_cedict(cedict_path)
+
+    # Ensure suspected_words table exists
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS suspected_words (
+            word TEXT PRIMARY KEY,
+            valid BOOLEAN,
+            added_at DATETIME DEFAULT (datetime('now'))
+        )
+    ''')
+
+    # Find min/max freq_rank in hkia for random assignment
+    cur = conn.cursor()
+    cur.execute(f"SELECT MIN(freq_rank), MAX(freq_rank) FROM {HKIA_TABLE} WHERE freq_rank IS NOT NULL")
+    min_freq, max_freq = cur.fetchone()
+    if min_freq is None or max_freq is None:
+        min_freq, max_freq = 1, 1000000  # fallback if table is empty
+    freq_range = max_freq - min_freq
+    lower_bound = int(min_freq + 0.5 * freq_range)
+
     known_found = set()
     not_found_in_freq_set = set()
     not_found_anywhere_set = set()
+    found_in_cedict_set = set()
     with open(INPUT_CSV, encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
         for row in reader:
@@ -116,12 +153,18 @@ def main():
                 in_char_names = word in char_names
                 if (freq_rank is None) and (not in_subtlex_word) and (not in_subtlex_char) and (not in_char_names):
                     not_found_anywhere_set.add(word)
-                    upsert_word(conn, word, None)
-                elif (freq_rank is None):
-                    not_found_in_freq_set.add(word)
-                    upsert_word(conn, word, None)
-                else:
+                    if word in cedict_dict:
+                        found_in_cedict_set.add(word)
+                        rand_freq = random.randint(lower_bound, max_freq)
+                        upsert_word(conn, word, rand_freq)
+                    else:
+                        # Insert into suspected_words instead of hkia
+                        conn.execute('INSERT OR IGNORE INTO suspected_words (word, valid) VALUES (?, NULL)', (word,))
+                elif (freq_rank is not None):
                     upsert_word(conn, word, freq_rank)
+                else:
+                    # If freq_rank is None but found in SUBTLEX or char_names, insert into suspected_words
+                    conn.execute('INSERT OR IGNORE INTO suspected_words (word, valid) VALUES (?, NULL)', (word,))
 
     conn.commit()
     total_words = count_words(conn, HKIA_TABLE)
@@ -136,8 +179,8 @@ def main():
 
     print(f"Import complete. {total_words} unique words in the hkia table.")
     print(f"{total_known_found} words from this session were already found in the known_words table and skipped.")
-    print(f"{len(not_found_in_freq_set)} unique words were not found in the frequency table but were found in SUBTLEX or character_names and were added with no freq_rank.")
-    print(f"{len(not_found_anywhere_set)} unique words were not found in any frequency table and were added with no freq_rank.")
+    print(f"{len(found_in_cedict_set)} words not found in any frequency table but found in CEDICT were added to hkia with a random freq_rank.")
+    print(f"{len(not_found_anywhere_set) - len(found_in_cedict_set)} words not found in any frequency table or CEDICT were added to suspected_words.")
     print(f"min_freq: {min_freq}, max_freq: {max_freq}, null_count: {null_count}")
 
     conn.close()

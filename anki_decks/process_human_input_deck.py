@@ -56,11 +56,12 @@ def main():
             if len(row) < 3:
                 continue
             word, sample_cn, sample_en = row[:3]
-            meaning, word_pinyin = get_meaning_and_pinyin(word, cedict)
+            # Use input meaning and sentence, not CEDICT meaning
+            word_pinyin = sentence_to_pinyin(word)
             sample_cn_bolded = bold_word_in_sentence(word, sample_cn) if sample_cn else ''
             sample_pinyin = sentence_to_pinyin(sample_cn) if sample_cn else ''
             writer.writerow([
-                word, meaning, word_pinyin,
+                word, '', word_pinyin,  # leave meaning blank, or use sample_en if you want
                 sample_cn_bolded, sample_en, sample_pinyin
             ])
     print(f"Done! Output saved to {args.output_file}")

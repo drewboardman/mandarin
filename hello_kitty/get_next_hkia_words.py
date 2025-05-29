@@ -12,10 +12,23 @@ def is_chinese(word):
     return bool(re.fullmatch(r'[\u4e00-\u9fff]+', word))
 
 def main():
-    n = DEFAULT_N
+    import sys
+    if len(sys.argv) > 1:
+        try:
+            n = int(sys.argv[1])
+        except ValueError:
+            print("Usage: python get_next_hkia_words.py [number_of_words]")
+            return
+    else:
+        n = DEFAULT_N
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
 
+    # Calculate how many to take from suspected_words
+    suspected_n = max(1, int(n * 0.15))
+    hkia_n = n - suspected_n
+
+    # Get words from hkia as before, but only (n - suspected_n)
     cur.execute(f'''
     SELECT h.freq_rank, h.word
     FROM {HKIA_TABLE} h
@@ -30,7 +43,6 @@ def main():
     found_in_known = 0
     for freq_rank, word in cur.fetchall():
         if is_chinese(word):
-            # Double check not in known_words
             cur2 = conn.execute(f'SELECT 1 FROM {KNOWN_WORDS_TABLE} WHERE word=?', (word,))
             if cur2.fetchone():
                 found_in_known += 1
@@ -38,8 +50,15 @@ def main():
             results.append((freq_rank, word))
             words_only.append(word)
             count += 1
-            if count >= n:
+            if count >= hkia_n:
                 break
+
+    # Now get suspected words with valid IS NULL or TRUE (not FALSE)
+    suspected_words = []
+    cur.execute("SELECT word FROM suspected_words WHERE valid IS NULL OR valid != 0 LIMIT ?", (suspected_n,))
+    for (word,) in cur.fetchall():
+        if is_chinese(word):
+            words_only.append(word)
 
     conn.close()
 
@@ -52,7 +71,7 @@ def main():
     with open(OUTPUT_FILE_CSV, 'w', encoding='utf-8') as f:
         f.write(', '.join(words_only) + '\n')
 
-    print(f"Saved {count} HKIA words to {OUTPUT_FILE_LINES} and {OUTPUT_FILE_CSV}")
+    print(f"Saved {len(words_only)} HKIA+suspected words to {OUTPUT_FILE_LINES} and {OUTPUT_FILE_CSV}")
     print(f"{found_in_known} words were found in known_words and skipped (should be zero)")
 
 if __name__ == "__main__":
