@@ -4,7 +4,6 @@ import jieba
 import re
 from tqdm import tqdm
 import argparse
-import random
 
 DB_PATH = os.path.abspath(os.path.join('..', 'freq_words.db'))
 ROOT_DIR = 'LocDB_zh-CN'
@@ -96,7 +95,6 @@ def main():
     already_known = 0
     cedict_only_count = 0
     jieba_only_count = 0
-    missing_jieba_freq = 0
     random_freq_count = 0
     # Get min/max for freq_words for normalization
     cur.execute('SELECT MIN(frequency), MAX(frequency) FROM freq_words')
@@ -146,20 +144,29 @@ def main():
             continue
         # Check CEDICT
         if word in cedict_dict:
-            frequency = random.uniform(norm_min, norm_max)
+            frequency = norm_min - 3
             cur.execute('INSERT OR IGNORE INTO disney (word, frequency) VALUES (?, ?)', (word, frequency))
             added_disney += 1
             cedict_only_count += 1
             continue
         # Check jieba
         if jieba.lcut(word, cut_all=False) == [word]:
-            frequency = random.uniform(norm_min, norm_max)
+            frequency = norm_min - 4
             cur.execute('INSERT OR IGNORE INTO disney (word, frequency) VALUES (?, ?)', (word, frequency))
             added_disney += 1
             jieba_only_count += 1
             continue
-        # Not found in any freq table, CEDICT, or jieba: add to disney with random frequency
-        frequency = random.uniform(norm_min, norm_max)
+        # Not found: Use component frequency if available, else lowest fallback
+        char_freqs = []
+        for char in word:
+            cur.execute('SELECT frequency FROM freq_words WHERE word = ?', (char,))
+            row = cur.fetchone()
+            if row:
+                char_freqs.append(row[0])
+        if char_freqs:
+            frequency = sum(char_freqs) / len(char_freqs)
+        else:
+            frequency = norm_min - 5
         cur.execute('INSERT OR IGNORE INTO disney (word, frequency) VALUES (?, ?)', (word, frequency))
         added_disney += 1
         random_freq_count += 1
@@ -176,7 +183,7 @@ def main():
     print(f"Words added to disney table from subtlex_words or subtlex_chars (normalized to freq_words scale): (count not tracked separately)")
     print(f"Words added to disney table only from CEDICT: {cedict_only_count}")
     print(f"Words added to disney table only from jieba: {jieba_only_count}")
-    print(f"Words added to disney table with random freq_rank (not found in any freq table, CEDICT, or jieba): {random_freq_count}")
+    print(f"Words added to disney table with fallback/component freq (not found in any freq table, CEDICT, or jieba): {random_freq_count}")
 
     conn.close()
 
