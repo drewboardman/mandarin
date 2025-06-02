@@ -3,7 +3,7 @@ import csv
 import os
 import sys
 
-DB_FILE = 'freq_words.db'
+DB_FILE = '../freq_words.db'
 
 
 def get_words_from_csv(csv_path):

@@ -18,6 +18,14 @@ You are a professional language educator and writer. Your task is to write a sho
 - Prefer short to medium-length sentences.
 - Repeat key vocabulary naturally throughout the story.
 
+## Difficulty
+
+Here is an example reader from another word set. Use this as a framework to adjust the difficulty to attempt to match this beginner level:
+
+>“你太小氣了！”大頭天天對歡歡很不好。
+>“這是什麽書？我要看一下！”大頭說。
+>“不，你不要過來，你不要過來。我要叫老師了！”歡歡生氣地大叫。”
+
 ## Format:
 
 - Only output the story. No explanations, no titles, no lists, no formatting.
