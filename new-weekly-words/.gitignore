@@ -1,3 +1,4 @@
 *.txt
 !words_for_ai.txt
 *.db
+!next_unknown**

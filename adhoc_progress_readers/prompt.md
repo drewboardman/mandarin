@@ -2,7 +2,7 @@ You are a professional language educator and writer. Your task is to write a sho
 
 ## Objectives:
 
-1. Write a single short story in **Simplified Chinese** of approximately **5,000 to 6,000 characters**.
+1. Write a single short story in **Simplified Chinese** of approximately **3,000 to 5,000 characters**.
 2. Use **every word** from the "NEW WORDS" list **at least twice** (if possible) in the story.
 3. You may freely use any words from the "KNOWN WORDS" list as supporting vocabulary.
 4. Do **not** use any words that are **not in the NEW WORDS or KNOWN WORDS** lists unless they are:
