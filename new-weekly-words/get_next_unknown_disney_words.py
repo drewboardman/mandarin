@@ -1,6 +1,7 @@
 import sqlite3
 import re
 import sys
+from datetime import datetime
 
 DB_FILE = '../freq_words.db'  # Change to disney.db if needed
 OUTPUT_FILE_LINES = 'next_unknown_disney_words.txt'
@@ -25,19 +26,32 @@ def main():
     FROM disney d
     LEFT JOIN known_words kw ON d.word = kw.word
     WHERE kw.word IS NULL
+      AND (d.useless IS NULL OR d.useless = 0)
+      AND d.queried_on IS NULL
     ORDER BY d.frequency DESC
     """)
 
     count = 0
     results = []
     words_only = []
+    words_to_update = []
     for frequency, word in cur.fetchall():
         if is_chinese(word):
             results.append((frequency, word))
             words_only.append(word)
+            words_to_update.append(word)
             count += 1
             if count >= n:
                 break
+
+    # Update queried_on for the selected words
+    if words_to_update:
+        now = datetime.now().isoformat(sep=' ', timespec='seconds')
+        cur.executemany(
+            "UPDATE disney SET queried_on = ? WHERE word = ?",
+            [(now, word) for word in words_to_update]
+        )
+        conn.commit()
 
     conn.close()
 

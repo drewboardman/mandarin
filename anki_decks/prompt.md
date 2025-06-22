@@ -47,9 +47,9 @@ Have meaning in context (e.g., “卡在”, “包在”)
 Are valid compound verbs, nouns, or set phrases
 
 📄 Output Format (tab-separated):
-Chinese_word[TAB]English_meaning[TAB]Pinyin[TAB]Example_sentence_CN[TAB]Example_sentence_EN[TAB]Example_sentence_Pinyin
+Chinese_word[TAB]English_meaning[TAB]Pinyin[TAB]Example_sentence_CN[TAB]Example_sentence_EN[TAB]Example_sentence_Pinyin[TAB]list_of_notes_html
 Example:
-行	walk	xíng	我每天走路去学校。	I walk to school every day.	wǒ měi tiān zǒu lù qù xué xiào 。
+地球	Earth	dì qiú	地球是我们的家。	Earth is our home.	dì qiú shì wǒ men de jiā.	<ul><li>地 (dì): land</li><li>球 (qiú): ball</li><li>地球 (dì qiú): Earth</li></ul>
 
 ⚠️ Final Report:
 At the end of the output, report how many entries were removed due to being malformed, trivial, or invalid:
